@@ -110,8 +110,7 @@ namespace emtf {
         case 3:
           result += 6;  // 7,8,9
           break;
-        case 4:                            // ME0
-          result = (chamber + 1) % 3 + 1;  // 1,2,3
+        case 4:
           break;
       }
     } else {
