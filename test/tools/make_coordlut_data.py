@@ -5,8 +5,8 @@ from Configuration.Eras.Era_Run2_2018_cff import Run2_2018
 process = cms.Process("Whatever",Run2_2018)
 
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')  # load from DB
-process.load('Configuration.StandardSequences.MagneticField_AutoFromDBCurrent_cff')
-process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
+process.load('Configuration.StandardSequences.MagneticField_cff')
+process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, '102X_dataRun2_Sep2018Rereco_v1')

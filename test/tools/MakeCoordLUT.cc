@@ -10,28 +10,26 @@
 #include "FWCore/Framework/interface/Frameworkfwd.h"
 #include "FWCore/Framework/interface/EDAnalyzer.h"
 #include "FWCore/Framework/interface/Event.h"
-#include "FWCore/Framework/interface/ESHandle.h"
-#include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/Framework/interface/EventSetup.h"
 #include "FWCore/Framework/interface/ESHandle.h"
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+//#include "FWCore/Utilities/interface/ESGetToken.h"
 
 #include "DataFormats/GeometryVector/interface/LocalPoint.h"
 #include "DataFormats/GeometryVector/interface/GlobalPoint.h"
 #include "DataFormats/MuonDetId/interface/CSCDetId.h"
 #include "DataFormats/MuonDetId/interface/CSCTriggerNumbering.h"
 #include "L1Trigger/CSCCommonTrigger/interface/CSCConstants.h"
+//#include "L1Trigger/CSCCommonTrigger/interface/CSCPatternLUT.h"
+//#include "L1Trigger/CSCTrackFinder/interface/CSCSectorReceiverLUT.h"
 
+#include "Geometry/Records/interface/MuonGeometryRecord.h"
 #include "Geometry/CSCGeometry/interface/CSCGeometry.h"
 #include "Geometry/CSCGeometry/interface/CSCChamber.h"
 #include "Geometry/CSCGeometry/interface/CSCLayer.h"
 #include "Geometry/CSCGeometry/interface/CSCLayerGeometry.h"
-#include "Geometry/Records/interface/MuonGeometryRecord.h"
 
-//#include "L1Trigger/CSCCommonTrigger/interface/CSCConstants.h"
-//#include "L1Trigger/CSCCommonTrigger/interface/CSCPatternLUT.h"
-//#include "L1Trigger/CSCTrackFinder/interface/CSCSectorReceiverLUT.h"
-
-#include "helper.h"
+#include "helper.h"  // deltaPhiInDegrees
 
 class MakeCoordLUT : public edm::EDAnalyzer {
 public:
@@ -681,6 +679,8 @@ void MakeCoordLUT::validateLUTs() {
       ring = cscDetId.ring();
       const int maxWire = layerGeom->numberOfWireGroups();
       const int maxStrip = layerGeom->numberOfStrips();
+      constexpr double _rad_to_deg = 180. / M_PI;
+      const double pitch = layerGeom->stripPhiPitch() * _rad_to_deg;
 
       // _______________________________________________________________________
       // Copied from PrimitiveConversion
@@ -833,9 +833,9 @@ void MakeCoordLUT::validateLUTs() {
           if (verbose_ > 1 && sector == verbose_sector_) {
             std::cout << "::validateLUTs()"
                       << " -- endcap " << endcap << " sec " << sector << " st " << st << " ch " << ch + 1 << " wire "
-                      << wire << " strip " << strip << " -- fph_int: " << fph_int << " fph_emu: " << fph_emu
-                      << " fph_sim: " << fph_sim << " -- fth_int: " << fth_int << " fth_emu: " << fth_emu
-                      << " fth_sim: " << fth_sim << std::endl;
+                      << wire << " strip " << strip << " pitch " << pitch << " -- fph_int: " << fph_int
+                      << " fph_emu: " << fph_emu << " fph_sim: " << fph_sim << " -- fth_int: " << fth_int
+                      << " fth_emu: " << fth_emu << " fth_sim: " << fth_sim << std::endl;
           }
         }  // end loop over strip
       }    // end loop over wire
@@ -993,7 +993,7 @@ bool MakeCoordLUT::isStripPhiCounterClockwise(const CSCDetId& cscDetId) const {
 
   const double phi1 = layer->centerOfStrip(1).phi();
   const double phi2 = layer->centerOfStrip(2).phi();
-  bool ccw = (deltaPhiInRadians(phi1, phi2) > 0.);
+  bool ccw = (deltaPhiInDegrees(phi1, phi2) > 0.);
   return ccw;
 }
 
