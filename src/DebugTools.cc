@@ -10,6 +10,32 @@ namespace emtf {
     constexpr int MIN_TRIGSECTOR = 1;
     constexpr int MAX_TRIGSECTOR = 6;
 
+    // Input variables
+    //
+    // Field  | Value for  | Value for       | Value for
+    // number | CSC        | RPC             | GE1/1
+    // -------|------------|-----------------|----------------
+    // 0      | bx_jitter  | 0               | 0
+    // 1      | endcap     | endcap          | endcap
+    // 2      | sector     | sector          | sector
+    // 3      | subsector  | 0               | 0
+    // 4      | station    | 10 deg chamber  | 10 deg chamber
+    //        |            | (0..6)          | (0..6)
+    // 5      | valid (=1) | valid (=2)      | valid (=3)
+    // 6      | quality    | 0               | 0
+    // 7      | pattern    | 0               | cluster size
+    // 8      | wiregroup  | converted theta | partition
+    // 9      | cscid      | station/ring    | layer
+    //        |            | (0..5)          | (0..1)
+    // 10     | bend       | 0               | 0
+    // 11     | halfstrip  | converted phi   | pad
+
+    // Delay w.r.t CSC
+    //
+    // Delay | RPC   | GE1/1
+    // ------|-------|-------
+    //       | +6    | -3
+
     for (int endcap = MIN_ENDCAP; endcap <= MAX_ENDCAP; ++endcap) {
       for (int sector = MIN_TRIGSECTOR; sector <= MAX_TRIGSECTOR; ++sector) {
         const int es = (endcap - MIN_ENDCAP) * (MAX_TRIGSECTOR - MIN_TRIGSECTOR + 1) + (sector - MIN_TRIGSECTOR);
@@ -21,37 +47,48 @@ namespace emtf {
         std::cout << "==== Endcap " << endcap << " Sector " << sector << " Hits ====" << std::endl;
         std::cout << "bx e s ss st vf ql cp wg id bd hs" << std::endl;
 
-        bool empty_sector = true;
-        for (const auto& h : out_hits) {
-          if (h.Sector_idx() != es)
-            continue;
-          empty_sector = false;
-        }
+        bool valid_sector = std::any_of(out_hits.begin(), out_hits.end(), [&es](const auto& h) {
+          return (h.Sector_idx() == es && h.Subsystem() == TriggerPrimitive::kCSC);
+        });
 
-        for (int ibx = -3 - 5; (ibx < +3 + 5 + 5) && !empty_sector; ++ibx) {
+        for (int ibx = -3 - 8; (ibx <= 3 + 11) && valid_sector; ++ibx) {
           for (const auto& h : out_hits) {
             if (h.Subsystem() == TriggerPrimitive::kCSC) {
               if (h.Sector_idx() != es)
                 continue;
-              if (h.BX() != ibx)
+              if (!(-3 <= h.BX() && h.BX() <= 3 && h.BX() == ibx))
                 continue;
 
-              int bx = 1;
-              int endcap = (h.Endcap() == 1) ? 1 : 2;
-              int sector = h.PC_sector();
-              int station = (h.PC_station() == 0 && h.Subsector() == 1) ? 1 : h.PC_station();
-              int chamber = h.PC_chamber() + 1;
-              int strip = (h.Station() == 1 && h.Ring() == 4) ? h.Strip() + 128 : h.Strip();  // ME1/1a
-              int wire = h.Wire();
-              int valid = 1;
-              std::cout << bx << " " << endcap << " " << sector << " " << h.Subsector() << " " << station << " "
-                        << valid << " " << h.Quality() << " " << h.Pattern() << " " << wire << " " << chamber << " "
-                        << h.Bend() << " " << strip << std::endl;
+              std::array<int, 12> values;
+              values.fill(0);
+
+              values[0] = 1;                                                                   // bx_jitter
+              values[1] = (h.Endcap() == 1) ? 1 : 2;                                           // endcap
+              values[2] = h.PC_sector();                                                       // sector
+              values[3] = h.Subsector();                                                       // subsector
+              values[4] = (h.PC_station() == 0 && h.Subsector() == 1) ? 1 : h.PC_station();    // station
+              values[5] = 1;                                                                   // valid
+              values[6] = h.Quality();                                                         // quality
+              values[7] = h.Pattern();                                                         // pattern
+              values[8] = h.Wire();                                                            // wiregroup
+              values[9] = h.PC_chamber() + 1;                                                  // cscid
+              values[10] = h.Bend();                                                           // bend
+              values[11] = (h.Station() == 1 && h.Ring() == 4) ? h.Strip() + 128 : h.Strip();  // halfstrip
+
+              for (unsigned i = 0; i < values.size(); i++) {
+                if (i < values.size() - 1) {
+                  std::cout << values[i] << " ";
+                } else {
+                  std::cout << values[i] << std::endl;
+                }
+              }
 
             } else if (h.Subsystem() == TriggerPrimitive::kRPC) {
               if (h.Sector_idx() != es)
                 continue;
-              if (h.BX() + 6 != ibx)
+              if ((h.Station() == 3 || h.Station() == 4) && (h.Ring() == 1))
+                continue;  // Skip iRPC
+              if (!(-3 <= h.BX() && h.BX() <= 3 && (h.BX() + 6) == ibx))
                 continue;  // RPC hits should be supplied 6 BX later relative to CSC hits
 
               // Assign RPC link index. Code taken from src/PrimitiveSelection.cc
@@ -67,21 +104,80 @@ namespace emtf {
               } else {
                 rpc_chm = 2 + (h.Station() - 3) * 2 + (h.Ring() - 2);
               }
+              assert(rpc_sub != -1 && rpc_chm != -1);
 
-              int bx = 1;
-              int endcap = (h.Endcap() == 1) ? 1 : 2;
-              int sector = h.PC_sector();
-              int station = rpc_sub;
-              int chamber = rpc_chm + 1;
-              int strip = (h.Phi_fp() >> 2);
-              int wire = (h.Theta_fp() >> 2);
-              int valid = 2;  // this marks RPC stub
-              std::cout << bx << " " << endcap << " " << sector << " " << 0 << " " << station << " " << valid << " "
-                        << 0 << " " << 0 << " " << wire << " " << chamber << " " << 0 << " " << strip << std::endl;
-            }
-          }  // end loop over hits
+              std::array<int, 12> values;
+              values.fill(0);
 
-          std::cout << "12345" << std::endl;
+              values[0] = 0;
+              values[1] = (h.Endcap() == 1) ? 1 : 2;  // endcap
+              values[2] = h.PC_sector();              // sector
+              values[3] = 0;
+              values[4] = rpc_sub;  // 10 deg chamber (0..6)
+              values[5] = 2;        // valid (=2)
+              values[6] = 0;
+              values[7] = 0;
+              values[8] = (h.Theta_fp() >> 2);  // converted theta
+              values[9] = rpc_chm;              // station/ring (0..5)
+              values[10] = 0;
+              values[11] = (h.Phi_fp() >> 2);  // converted phi
+
+              for (unsigned i = 0; i < values.size(); i++) {
+                if (i < values.size() - 1) {
+                  std::cout << values[i] << " ";
+                } else {
+                  std::cout << values[i] << std::endl;
+                }
+              }
+
+            } else if (h.Subsystem() == TriggerPrimitive::kGEM) {
+              if (h.Sector_idx() != es)
+                continue;
+              if (h.Station() == 2)
+                continue;  // Skip GE2/1
+              if (!(-3 <= h.BX() && h.BX() <= 3 && (h.BX() - 3) == ibx))
+                continue;  // GEM hits should be supplied 3 BX earlier relative to CSC hits
+
+              int gem_sub = -1;
+              int gem_lay = -1;
+              if (!h.Neighbor()) {
+                gem_sub = h.PC_chamber();
+              } else {
+                gem_sub = 6;
+              }
+              const GEMDetId gemDetId = h.GEM_DetId();
+              gem_lay = gemDetId.layer() - 1;
+              assert(gem_sub != -1 && gem_lay != -1);
+
+              std::array<int, 12> values;
+              values.fill(0);
+
+              values[0] = 0;
+              values[1] = (h.Endcap() == 1) ? 1 : 2;  // endcap
+              values[2] = h.PC_sector();              // sector
+              values[3] = 0;
+              values[4] = gem_sub;  // 10 deg chamber (0..6)
+              values[5] = 3;        // valid (=3)
+              values[6] = 0;
+              values[7] = h.Quality();  // cluster size
+              values[8] = h.Roll();     // partition
+              values[9] = gem_lay;      // layer (0..1)
+              values[10] = 0;
+              values[11] = h.Strip();  // pad
+
+              for (unsigned i = 0; i < values.size(); i++) {
+                if (i < values.size() - 1) {
+                  std::cout << values[i] << " ";
+                } else {
+                  std::cout << values[i] << std::endl;
+                }
+              }
+
+            }  // end else-if
+          }    // end loop over hits
+
+          std::cout << "12345" << std::endl;  // BX separator
+
         }  // end loop over bx
 
         // _____________________________________________________________________
@@ -101,6 +197,6 @@ namespace emtf {
 
       }  // end loop over sector
     }    // end loop over endcap
-  }
+  }      // end function
 
 }  // namespace emtf
